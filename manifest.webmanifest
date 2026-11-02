@@ -1,0 +1,52 @@
+{
+  "name": "Mishkat — a companion for carrying the Qur’an",
+  "short_name": "Mishkat",
+  "description": "A day-by-day Sabaq / Sabqi / Manzil plan to memorise the Qur'an — the whole mushaf, a juz, surahs or chosen pages — with a practice room, recitation audio, catch-up planning and streak tracking. English and Arabic.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#08150f",
+  "theme_color": "#08150f",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": [
+    "education",
+    "productivity",
+    "lifestyle"
+  ],
+  "icons": [
+    {
+      "src": "assets/logo-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/logo-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/logo-1024.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Today's lesson",
+      "url": "./index.html#today"
+    },
+    {
+      "name": "Practice room",
+      "url": "./index.html#learn"
+    },
+    {
+      "name": "Catch up",
+      "url": "./index.html#catchup"
+    }
+  ]
+}
