@@ -96,6 +96,28 @@ git push -u origin main
 
 > **When you replace `index.html` later,** bump the cache name in `sw.js` (`mishkat-v1` → `mishkat-v2`). Browsers keep serving the old cached copy until the service worker changes.
 
+### Phone install vs app stores
+
+**Home screen is the intended path.** `manifest.webmanifest` + `sw.js` already make
+this a proper PWA: standalone window, own icon, offline. On Android Chrome the app
+shows a real `beforeinstallprompt` button; on iOS the People page shows the Safari
+Share-sheet steps. Share **[HOME-SCREEN.md](HOME-SCREEN.md)** with whoever installs it.
+
+**Stores, if you ever want them:** a website cannot be uploaded to either store.
+It has to be wrapped in a native shell.
+
+| | Google Play | App Store |
+|---|---|---|
+| Account | $25 once | $99 / year |
+| Build | PWABuilder / Bubblewrap → AAB, or Capacitor | Capacitor + **Mac with Xcode** |
+| Extra gate | new personal accounts need a closed test with **12 testers for 14 days** | review, plus a privacy policy |
+| Realistic time | 3–5 weeks | 1–2 weeks + a Mac |
+
+Both stores also require a privacy policy — easy here (`PROGRESS.md`-style honesty:
+no analytics, no accounts unless you enable cloud backup). Nothing else changes: the
+same `index.html` runs inside the shell, so a store build is a packaging job, not a
+port. Do it only if the home-screen route actually fails you.
+
 ### Owner access (for you, not for students)
 
 Your own plan lives in its own record on the device, behind a code

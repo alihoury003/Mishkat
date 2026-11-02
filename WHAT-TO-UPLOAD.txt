@@ -1,25 +1,25 @@
-DROP-IN UPDATE — 5 files, no full re-upload
+DROP-IN UPDATE — 7 files, no full re-upload
 ============================================
 
-Upload these into the repo root, replacing the existing ones:
+Essential (the app itself):
 
-  1. index.html     <- the app itself (built file: the whole change lives here)
-  2. sw.js          <- cache bumped to mishkat-v8 so phones fetch the new app
-  3. README.md      <- documents the new Owner-access steps
+  1. index.html       <- built app; "Put it on your home screen" card on People
+  2. sw.js            <- cache bumped to mishkat-v9 so phones fetch the new app
 
-Optional, only if you also keep the source in the repo:
+Docs:
 
-  4. app/app.js     <- owner record is no longer deleted on "Switch to a student"
-  5. app/i18n.js    <- new owner strings (EN + AR)
+  3. README.md        <- stores vs home screen, owner access
+  4. HOME-SCREEN.md   <- NEW file: iPhone/Android install steps, English + Arabic.
+                         Send this link to whoever installs Mishkat.
 
-Everything else (assets/, data/, fonts/, img/, manifest, CLOUD-SETUP.md,
-build scripts) is unchanged — do not re-upload it.
+Source (only if app/ is in your repo):
 
-On github.com: open the file in the repo -> pencil icon -> delete all -> paste
-the new contents -> Commit changes.  For app/app.js and app/i18n.js do the same
-in the app/ folder.
+  5. app/app.js
+  6. app/i18n.js
+  7. app/style.css
 
-Order matters slightly: commit index.html and sw.js together so nobody loads
-the new HTML with an old service worker.
+Everything else (assets/, data/, fonts/, img/, manifest.webmanifest,
+CLOUD-SETUP.md, build scripts) is unchanged.
 
-CLOUDSETUP note: CLOUD-SETUP.md is unchanged since your last upload.
+iOS note: only Safari can install a web app. Chrome/Firefox on iPhone cannot —
+the app now detects that and says so on the People page.

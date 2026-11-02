@@ -1226,6 +1226,60 @@ function cloudTouch() {
   }, 4000);
 }
 
+
+/* ============================================================
+   ADD TO HOME SCREEN — the app is already a PWA; this makes it obvious.
+   On iOS only Safari can install; on Android Chrome (and Edge) show a real prompt.
+   ============================================================ */
+const INSTALL_DONE = 'mishkat.install.done';
+const standalone = () => (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const isSafari = () => isIOS() && /^((?!chrome|android|crios|fxios|edgios).)*safari/i.test(navigator.userAgent);
+const isFirefox = () => /Firefox|FxiOS/i.test(navigator.userAgent);
+let installEvent = null;
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvent = e; });
+
+function installCard() {
+  if (standalone() || localStorage.getItem(INSTALL_DONE)) return '';
+  const step = (n, txt) => `<li><b>${n}</b> ${esc(txt)}</li>`;
+  let inner;
+  if (isIOS()) {
+    inner = isSafari() ? `
+      <ol class="inst-steps has-share">
+        ${step(1, T('inst_ios_1'))}
+        ${step(2, T('inst_ios_2'))}
+        ${step(3, T('inst_ios_3'))}
+        ${step(4, T('inst_ios_4'))}
+      </ol>
+      <p class="note">${esc(T('inst_ios_note'))}</p>`
+      : `<p class="note">${esc(T('inst_ios_safari'))}</p>
+         <ol class="inst-steps">
+           ${step(1, T('inst_ios_1'))}
+           ${step(2, T('inst_ios_2'))}
+           ${step(3, T('inst_ios_3'))}
+           ${step(4, T('inst_ios_4'))}
+         </ol>`;
+  } else if (installEvent) {
+    inner = `<p class="note">${esc(T('inst_android_lede'))}</p>
+      <div class="row" style="margin-top:10px"><button class="btn pri sm" data-install-go>${esc(T('inst_install'))}</button></div>`;
+  } else if (isFirefox()) {
+    inner = `<ol class="inst-steps">${step(1, T('inst_ff_1'))}${step(2, T('inst_ff_2'))}</ol>
+      <p class="note">${esc(T('inst_ff_note'))}</p>`;
+  } else {
+    inner = `<p class="note">${esc(T('inst_android_lede'))}</p>
+      <ol class="inst-steps">${step(1, T('inst_android_1'))}${step(2, T('inst_android_2'))}</ol>
+      <p class="note">${esc(T('inst_android_note'))}</p>`;
+  }
+  return `<div class="card install-card" style="margin-top:16px">
+    <div class="card-h"><h3>${esc(T('inst_title'))}</h3><div class="right"><span class="badge">${esc(T('inst_badge'))}</span></div></div>
+    <p class="note">${esc(T('inst_lede'))}</p>
+    ${inner}
+    <div class="row" style="margin-top:12px">
+      <button class="btn sm ghost" data-install-hide>${esc(T('inst_hide'))}</button>
+    </div>
+  </div>`;
+}
+
 /* ============================================================
    PEOPLE — this browser can hold more than one hafiz
    ============================================================ */
@@ -1311,6 +1365,8 @@ function renderPeople() {
     <p class="note" style="margin-top:14px">${esc(T('pp_honest'))}</p>
     ${isOwner() ? '' : `<div class="row" style="margin-top:10px"><button class="btn sm ghost" data-owner-start>${esc(T('owner_enter'))}</button></div>`}
   </div>
+
+  ${installCard()}
 
   ${cloudCard()}
 
@@ -1972,7 +2028,7 @@ function go(v, opts = {}) {
    EVENTS
    ============================================================ */
 const OB_SEL = '[data-ob-next],[data-ob-back],[data-ob-finish],[data-ob-lang],[data-ob-page],[data-ob-juz],[data-ob-surah],[data-ob-shaky],[data-ob-clear],[data-ob-all],[data-ob-budget],[data-ob-mode],[data-ob-pick],[data-ob-pickclear]';
-const PERSON_SEL = '[data-person-open],[data-person-export],[data-person-del],[data-person-new],[data-person-restore],[data-cloud-save],[data-cloud-send],[data-cloud-verify],[data-cloud-push],[data-cloud-pull],[data-cloud-signout],[data-cloud-forget],[data-cloud-sqlcopy],[data-owner-go],[data-owner-close],[data-owner-lock],[data-owner-panel],[data-owner-start]';
+const PERSON_SEL = '[data-person-open],[data-person-export],[data-person-del],[data-person-new],[data-person-restore],[data-cloud-save],[data-cloud-send],[data-cloud-verify],[data-cloud-push],[data-cloud-pull],[data-cloud-signout],[data-cloud-forget],[data-cloud-sqlcopy],[data-owner-go],[data-owner-close],[data-owner-lock],[data-owner-panel],[data-owner-start],[data-install-go],[data-install-hide]';
 const CATCH_SEL = '[data-forget],[data-catchup],[data-skipcatch],[data-viewcatch]';
 const SYNC_SEL = '[data-sync-out],[data-sync-in],[data-copy-sync],[data-apply-sync]';
 
@@ -2147,6 +2203,22 @@ document.addEventListener('click', (ev) => {
       toast(T('sync_done'), 3400);
     }).catch(() => toast(T('sync_bad'), 4200));
     return;
+  }
+
+  /* ---- add to home screen */
+  if (el.dataset.installGo !== undefined) {
+    if (!installEvent) { toast(T('inst_unavailable'), 3600); return; }
+    const ev = installEvent; installEvent = null;
+    ev.prompt();
+    ev.userChoice.then((choice) => {
+      if (choice && choice.outcome === 'accepted') { localStorage.setItem(INSTALL_DONE, '1'); toast(T('inst_done'), 3600); }
+      render();
+    }).catch(() => render());
+    return;
+  }
+  if (el.dataset.installHide !== undefined) {
+    localStorage.setItem(INSTALL_DONE, '1'); render();
+    toast(T('inst_hidden'), 3200); return;
   }
 
   /* ---- cloud backup */
