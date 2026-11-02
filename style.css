@@ -849,3 +849,45 @@ html[dir="rtl"] .scope-line b{letter-spacing:0}
   font-size:10.5px;font-weight:600;color:var(--ink);background:color-mix(in srgb,var(--accent) 22%,transparent);
   border:1px solid color-mix(in srgb,var(--accent) 40%,transparent)}
 @media (max-width:820px){ .install-card .inst-steps{font-size:12px} }
+
+/* ============================================================
+   GOAL PICKER — all juz, all 114 surahs, loose pages, subtractable
+   ============================================================ */
+.goal-chosen{margin-top:14px;padding:12px;border-radius:12px;border:1px solid color-mix(in srgb,var(--accent) 26%,var(--line));
+  background:color-mix(in srgb,var(--accent) 7%,transparent)}
+.goal-chosen .sub-head{margin-bottom:8px}
+.gchip{display:inline-flex;align-items:center;gap:6px;margin:0 6px 6px 0;padding:5px 6px 5px 10px;border-radius:999px;
+  font-size:11.5px;color:var(--ink);background:color-mix(in srgb,var(--accent) 16%,transparent);
+  border:1px solid color-mix(in srgb,var(--accent) 34%,transparent)}
+.gchip-x{border:0;background:transparent;color:var(--muted);font-size:11px;line-height:1;padding:2px 3px;cursor:pointer;border-radius:50%}
+.gchip-x:hover{color:#ffb4a8}
+.pick-block{margin-top:18px}
+.pick-block .sub-head{display:flex;justify-content:space-between;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:8px}
+.jcell{display:flex;align-items:stretch;gap:4px;min-width:0}
+.jcell .sub{flex:1 1 auto}
+.jcell.part .sub{border-style:dashed;border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}
+.jcell .mini.x{flex:0 0 26px;font-size:10px;opacity:.75}
+.jpages{display:flex;flex-wrap:wrap;gap:5px;grid-column:1/-1;padding:8px 2px 10px;border-bottom:1px dashed var(--line);margin-bottom:4px}
+.jpages.bare{display:grid;grid-template-columns:repeat(auto-fill,minmax(38px,1fr));gap:4px;max-height:230px;overflow:auto;padding:8px;
+  border:1px solid var(--line);border-radius:12px;border-bottom:1px solid var(--line)}
+.jpages .pg{min-width:34px;height:28px;font-size:10.5px}
+.sub-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
+.sub-grid.cols{grid-template-columns:repeat(auto-fill,minmax(180px,1fr))}
+@media (max-width:820px){
+  .sub-grid,.sub-grid.cols{grid-template-columns:1fr 1fr}
+  .jpages.bare{grid-template-columns:repeat(auto-fill,minmax(34px,1fr));max-height:190px}
+  .gchip{font-size:11px}
+}
+.mini.wide{padding:4px 9px;font-size:10px;letter-spacing:.04em;white-space:nowrap}
+
+/* tighter goal picker on small screens */
+@media (max-width:820px){
+  .pick-block .sub-head{gap:6px}
+  .pick-block .sub-head .note{font-size:11px;line-height:1.4}
+  .jcell{gap:3px}
+  .jcell .mini.x{flex:0 0 30px;font-size:11px}
+  .sub-grid .sub{padding:9px 10px}
+  .sub-grid .sub b{font-size:12px}
+  .sub-grid .sub span{font-size:10px}
+  .mini.wide{font-size:9.5px;padding:4px 7px}
+}

@@ -610,7 +610,8 @@ function startOnboarding() {
     startPage: p.startPage || 1,
     budget: p.budget || 45,
     mode: (p.scope && p.scope.mode) || 'all',
-    picks: modeSet((p.scope && p.scope.pages) || [])
+    picks: modeSet((p.scope && p.scope.pages) || []),
+    expanded: new Set()
   };
   view = 'onboard';
   render();
@@ -621,11 +622,15 @@ function startOnboarding() {
 const MODE_NAMES = { all: 'goal_all', juz: 'goal_juz', surah: 'goal_surah', pages: 'goal_pages' };
 function modeSet(pages) { return new Set(pages || []); }
 
+/* the goal is stored as a plain page list; the mode is only a label for the UI */
+function scopePages(picks) {
+  const all = [...picks];
+  return all.length === 604 ? null : all.sort((a, b) => a - b);
+}
 function draftScope() {
-  const mode = draft.mode || 'all';
-  if (mode === 'all') return { mode: 'all' };
-  const picked = [...draft.picks].sort((a, b) => a - b);
-  return { mode, pages: picked };
+  const pages = scopePages(draft.picks);
+  if (!pages) return { mode: 'all' };
+  return { mode: scopeModeOf(pages), pages };
 }
 function draftJourney() {
   return MishkatPlan.build({
@@ -637,7 +642,81 @@ function draftJourney() {
     start: todayISO()
   });
 }
-/* every page covered by a set of juz numbers or surah numbers */
+/* The goal described as parts: whole juz, whole surahs, and runs of pages inside
+   one juz ("Juz 29 · 562–569, 571–581"). This keeps "Juz 30 minus one page" from
+   turning into thirty surah names. */
+function scopeRuns(pages) {
+  if (!pages || !pages.length) return [];
+  const sorted = [...pages].sort((a, b) => a - b);
+  const runs = [];
+  let cur = [sorted[0]];
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i] === sorted[i - 1] + 1) cur.push(sorted[i]);
+    else { runs.push(cur); cur = [sorted[i]]; }
+  }
+  runs.push(cur);
+  const parts = runs.map((run) => {
+    const a = run[0], b = run[run.length - 1], inRun = new Set(run);
+    const wholeJuz = Object.keys(JUZMAP || {}).map(Number).find((j) => {
+      const jp = JUZMAP[j]; return jp.length === run.length && jp.every((p) => inRun.has(p));
+    });
+    if (wholeJuz) return { pages: run, kind: 'juz', juz: wholeJuz };
+    const wholeSurah = Object.keys(SURAHMAP || {}).map(Number).find((n) => {
+      const sp = SURAHMAP[n].pages; return sp.length === run.length && sp.every((p) => inRun.has(p));
+    });
+    if (wholeSurah) return { pages: run, kind: 'surah', surah: wholeSurah };
+    if (a === b) return { pages: run, kind: 'single', a };
+    const juzOf = Object.keys(JUZMAP || {}).map(Number).find((j) => (JUZMAP[j] || []).indexOf(a) >= 0 && (JUZMAP[j] || []).indexOf(b) >= 0);
+    return juzOf ? { pages: run, kind: 'juzrange', juz: juzOf, a, b } : { pages: run, kind: 'range', a, b };
+  });
+  /* page runs that sit inside the same juz become one part */
+  const byJuz = {};
+  const out = [];
+  parts.forEach((pt) => {
+    if (pt.kind !== 'juzrange') { out.push(pt); return; }
+    const key = 'j' + pt.juz;
+    if (!byJuz[key]) { byJuz[key] = { kind: 'juzranges', juz: pt.juz, spans: [], pages: [] }; }
+    byJuz[key].spans.push([pt.a, pt.b]);
+    byJuz[key].pages.push(...pt.pages);
+  });
+  const merged = Object.values(byJuz);
+  merged.forEach((m) => { m.spans.sort((x, y) => x[0] - y[0]); m.pages.sort((x, y) => x - y); });
+  /* keep page order: juz runs are inserted where their first page belongs */
+  return out.concat(merged).sort((x, y) => Math.min(...x.pages) - Math.min(...y.pages));
+}
+function runLabel(part) {
+  switch (part.kind) {
+    case 'juz': return `${T('juz')} ${part.juz}`;
+    case 'surah': return surahName(part.surah);
+    case 'single': return `${T('page_abbr')}${part.a}`;
+    case 'range': return `${T('pages_word')} ${part.a}–${part.b}`;
+    case 'juzranges':
+      return `${T('juz')} ${part.juz} · ${part.spans.map(([a, b]) => a === b ? a : `${a}–${b}`).join(', ')}`;
+    default: return '';
+  }
+}
+function surahName(n) {
+  const m = SURAHMAP && SURAHMAP[n];
+  if (!m) return '—';
+  return S.lang === 'ar' ? (m.arPlain || m.ar) : m.en;
+}
+/* "Juz 29 · Al-Mulk · p.100" — the honest one-line label for any goal */
+function scopeLabelOf(pages, brief) {
+  if (!pages || !pages.length) return T('goal_all');
+  const names = scopeRuns(pages).map(runLabel);
+  const shown = names.length <= 3 ? names : names.length <= 6 ? names.slice(0, 4).concat(`+${names.length - 4}`) : names.slice(0, 3).concat(`+${names.length - 3}`);
+  const total = `${pages.length} ${pages.length === 1 ? T('page_one') : T('pages_word')}`;
+  return brief ? shown.join(' · ') : `${shown.join(' · ')} — ${total}`;
+}
+function scopeModeOf(pages) {
+  if (!pages || !pages.length) return 'all';
+  const set = new Set(pages);
+  const juzs = Object.keys(JUZMAP || {}).map(Number).filter((j) => (JUZMAP[j] || []).every((p) => set.has(p)));
+  if (juzs.length && juzs.reduce((n, j) => n + JUZMAP[j].length, 0) === pages.length) return 'juz';
+  const surahs = Object.keys(SURAHMAP || {}).map(Number).filter((n) => SURAHMAP[n].pages.every((p) => set.has(p)));
+  if (surahs.length && surahs.reduce((n, x) => n + SURAHMAP[x].pages.length, 0) === pages.length) return 'surah';
+  return 'pages';
+}
 function pagesFromJuz(list) {
   const out = new Set();
   list.forEach((j) => (JUZMAP[j] || []).forEach((p) => out.add(p)));
@@ -663,12 +742,19 @@ function goalStep() {
     { k: 'all', q: 'goal_q_all', s: 'goal_s_all', ic: '◎' },
     { k: 'juz', q: 'goal_q_juz', s: 'goal_s_juz', ic: '❖' },
     { k: 'surah', q: 'goal_q_surah', s: 'goal_s_surah', ic: '◈' },
-    { k: 'pages', q: 'goal_q_pages', s: 'goal_s_pages', ic: '▤' }
+    { k: 'mixed', q: 'goal_q_mixed', s: 'goal_s_mixed', ic: '⁂' }
   ];
-  let html = `<h2 class="ob-h">${esc(T('goal_h'))}</h2><p class="note">${esc(T('goal_hint'))}</p>
+  const picks = [...draft.picks].sort((a, b) => a - b);
+  const runs = scopeRuns(picks);
+  const everySurah = Object.values(SURAHMAP || {}).sort((a, b) => a.n - b.n);
+  const litMode = !picks.length ? 'all'
+    : runs.every((r) => r.kind === 'juz') ? 'juz'
+      : runs.every((r) => r.kind === 'surah') ? 'surah' : 'mixed';
+
+  let html = `<h2 class="ob-h">${esc(T('goal_h'))}</h2><p class="note">${esc(T('goal_hint2'))}</p>
     <div class="goal-grid">`;
   modes.forEach((m) => {
-    html += `<button class="goal ${draft.mode === m.k ? 'on' : ''}" data-ob-mode="${m.k}">
+    html += `<button class="goal ${litMode === m.k ? 'on' : ''}" data-ob-mode="${m.k}">
       <span class="goal-ic">${m.ic}</span>
       <b>${esc(T(m.q))}</b>
       <span class="goal-sub">${esc(T(m.s))}</span>
@@ -676,32 +762,78 @@ function goalStep() {
   });
   html += `</div>`;
 
-  if (draft.mode === 'juz' || draft.mode === 'surah') {
-    const kind = draft.mode;
-    const list = kind === 'juz'
-      ? Object.keys(JUZMAP || {}).map(Number).sort((a, b) => a - b)
-          .map((j) => ({ k: j, ar: '', label: `${T('juz')} ${j}`, sub: `${JUZMAP[j][0]}–${JUZMAP[j][JUZMAP[j].length - 1]}` }))
-      : Object.values(SURAHMAP || {}).sort((a, b) => a.n - b.n)
-          .map((m) => ({ k: m.n, ar: S.lang === 'ar' ? '' : m.arPlain, label: m.en, sub: `${m.pages.length} ${m.pages.length === 1 ? T('page_one') : T('pages_word')} · ${m.pages[0]}–${m.pages[m.pages.length - 1]}` }));
-    const covered = coveredBy([...draft.picks], kind);
-    html += `<div class="sub-pick">
-      <div class="sub-head"><b>${esc(T(kind === 'juz' ? 'pick_juz' : 'pick_surah'))}</b>
-        <span class="note">${esc(T('pick_multi'))}</span></div>
-      <div class="sub-grid ${kind === 'surah' ? 'cols' : ''}">`;
-    list.forEach((it) => {
-      const on = covered.includes(it.k);
-      html += `<button class="sub ${on ? 'on' : ''}" data-ob-pick="${it.k}" data-ob-kind="${kind}">
-        <b>${esc(it.label)}</b><span>${esc(it.sub)}</span></button>`;
-    });
-    html += `</div>
-      <div class="row" style="margin-top:10px;justify-content:space-between">
-        <span class="note">${esc(T(kind === 'juz' ? 'picked_juz' : 'picked_surah', { n: covered.length, pages: draft.picks.size }))}</span>
-        <button class="btn sm ghost" data-ob-pickclear>${esc(T('clear'))}</button>
-      </div></div>`;
-  } else if (draft.mode === 'pages') {
-    html += `<div class="sub-pick"><div class="sub-head"><b>${esc(T('pick_pages'))}</b><span class="note">${esc(T('pick_multi'))}</span></div>
-      ${pickerHTML('picks', true)}</div>`;
+  /* what is chosen so far — kinds listed apart, each removable */
+  if (picks.length) {
+    html += `<div class="goal-chosen">
+      <div class="sub-head"><b>${esc(T('goal_chosen'))}</b><span class="note">${esc(T('picked_total', { n: picks.length }))}</span></div>`;
+    const chip = (label, pages) => `<span class="gchip">${esc(label)}
+        <button class="gchip-x" data-ob-exclude="${pages.join(',')}" title="${esc(T('goal_exclude_hint'))}">✕</button></span>`;
+    runs.forEach((r) => { html += chip(runLabel(r), r.pages); });
+    html += `</div>`;
   }
+
+  /* juz: every juz, each opening its own pages so pages can be dropped */
+  html += `<div class="pick-block">
+    <div class="sub-head"><b>${esc(T('pick_juz'))}</b>
+      <span class="row" style="gap:8px;align-items:center">
+        <span class="note">${esc(T('pick_juz_hint'))}</span>
+        <button class="mini wide" data-ob-open="j">${esc(T('all_pages'))}</button>
+      </span></div>
+    <div class="sub-grid">`;
+  Object.keys(JUZMAP || {}).map(Number).sort((a, b) => a - b).forEach((j) => {
+    const pages = JUZMAP[j];
+    const on = pages.filter((p) => draft.picks.has(p)).length;
+    const full = on === pages.length;
+    const open = draft.expanded.has('j' + j);
+    html += `<div class="jcell ${full ? 'full' : on ? 'part' : ''}">
+      <button class="sub ${full ? 'on' : ''}" data-ob-pick="${j}" data-ob-kind="juz">
+        <b>${esc(T('juz'))} ${j}</b><span>${pages[0]}–${pages[pages.length - 1]}${on && !full ? ` · ${on}/${pages.length}` : ''}</span>
+      </button>
+      <button class="mini x" data-ob-open="j${j}" title="${esc(T('pick_pages_hint'))}">${open ? '▾' : '▸'}</button>
+    </div>`;
+    if (open) {
+      html += `<div class="jpages">${pages.map((p) => `<button class="pg ${draft.picks.has(p) ? 'on' : ''}" data-ob-page="${p}" title="p.${p} ${esc(pageTitle(p))}">${p}</button>`).join('')}</div>`;
+    }
+  });
+  html += `</div></div>`;
+
+  /* surahs: all 114, ordered, searchable in the eye by name */
+  html += `<div class="pick-block">
+    <div class="sub-head"><b>${esc(T('pick_surah'))}</b>
+      <span class="row" style="gap:8px;align-items:center">
+        <span class="note">${esc(T('pick_surah_hint', { n: everySurah.length }))}</span>
+        <button class="mini wide" data-ob-open="s">${esc(T('all_pages'))}</button>
+      </span></div>
+    <div class="sub-grid cols">`;
+  everySurah.forEach((m) => {
+    const on = m.pages.filter((p) => draft.picks.has(p)).length;
+    const full = on === m.pages.length;
+    const open = draft.expanded.has('s' + m.n);
+    html += `<div class="jcell ${full ? 'full' : on ? 'part' : ''}">
+      <button class="sub ${full ? 'on' : ''}" data-ob-pick="${m.n}" data-ob-kind="surah" title="${esc(T('page_abbr') + m.pages[0] + ' · ' + (pageTitle(m.pages[0]) || ''))}">
+        <b>${m.n}. ${esc(surahName(m.n))}</b><span>${m.pages.length} ${m.pages.length === 1 ? T('page_one') : T('pages_word')}${m.pages.length === 1 ? ` · ${T('page_abbr')}${m.pages[0]}` : ''}${on && !full ? ` · ${on}/${m.pages.length}` : ''}</span>
+      </button>
+      <button class="mini x" data-ob-open="s${m.n}" title="${esc(T('pick_pages_hint'))}">${open ? '▾' : '▸'}</button>
+    </div>`;
+    if (open) {
+      html += `<div class="jpages">${m.pages.map((p) => `<button class="pg ${draft.picks.has(p) ? 'on' : ''}" data-ob-page="${p}" title="p.${p} ${esc(pageTitle(p))}">${p}</button>`).join('')}</div>`;
+    }
+  });
+  html += `</div></div>`;
+
+  /* any page at all */
+  html += `<div class="pick-block">
+    <div class="sub-head"><b>${esc(T('pick_pages'))}</b><span class="note">${esc(T('pick_pages_hint'))}</span></div>
+    <div class="jpages bare">${Array.from({ length: 604 }, (_, i) => i + 1).map((p) => `<button class="pg ${draft.picks.has(p) ? 'on' : ''}" data-ob-page="${p}" title="p.${p} ${esc(pageTitle(p))}">${p}</button>`).join('')}</div>
+  </div>`;
+
+  html += `<div class="row" style="margin-top:14px;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <span class="note">${esc(T('selected', { n: picks.length }))}</span>
+      <span class="row">
+        <button class="btn sm ghost" data-ob-pickclear>${esc(T('clear'))}</button>
+        <button class="btn sm ghost" data-ob-all>${esc(T('select_all'))}</button>
+      </span>
+    </div>`;
   return html;
 }
 
@@ -731,8 +863,8 @@ function onboardView() {
   } else if (st === 3) {
     if (!draft.startTouched) {
       const known = [...draft.known].sort((a, b) => a - b);
-      const scoped = draft.mode !== 'all' && draft.picks.size ? Math.min(...draft.picks) : 1;
-      draft.startPage = draft.mode === 'all' ? (known.length ? Math.min(604, known[known.length - 1] + 1) : 1) : scoped;
+      const scoped = draft.picks.size ? Math.min(...draft.picks) : 1;
+      draft.startPage = !draft.picks.size ? (known.length ? Math.min(604, known[known.length - 1] + 1) : 1) : scoped;
     }
     body = `<h2 class="ob-h">${esc(T('daily_time'))}</h2>
       <p class="note">${esc(T('pace_hint'))}</p>
@@ -742,7 +874,7 @@ function onboardView() {
       <h2 class="ob-h">${esc(T('soldering'))}</h2>
       <p class="note">${esc(T('solder_hint'))}</p>
       ${(() => {
-        const pool = draft.mode !== 'all' && draft.picks.size
+        const pool = draft.picks.size
           ? [...draft.known].filter((p) => draft.picks.has(p))
           : [...draft.known];
         pool.sort((a, b) => a - b);
@@ -759,11 +891,7 @@ function onboardView() {
   } else {
     const probe = draftJourney();
     const weekly = Math.max(1, Math.round((draft.budget - 12) / 33 * 5.5));
-    const scopeLabel = draft.mode === 'all'
-      ? T('goal_all')
-      : draft.mode === 'juz' ? `${T('goal_q_juz')} · ${coveredBy([...draft.picks], 'juz').map((j) => T('juz') + ' ' + j).join(' · ') || '—'}`
-      : draft.mode === 'surah' ? `${T('goal_q_surah')} · ${coveredBy([...draft.picks], 'surah').map((n) => SURAHMAP[n].en).join(' · ') || draft.picks.size + ' ' + T('pages_word')}`
-      : `${draft.picks.size} ${T('pages_word')}`;
+    const scopeLabel = scopeLabelOf([...draft.picks]);
     body = `<h2 class="ob-h">${esc(T('summary'))}</h2>
       <div class="ob-summary">
         <div><span>${esc(T('summary_goal'))}</span><b class="sm">${esc(scopeLabel)}</b></div>
@@ -778,7 +906,7 @@ function onboardView() {
   }
 
   const canNext = st !== 0 || draft.name.trim().length > 0;
-  const blocked = st === 1 && draft.mode !== 'all' && draft.picks.size === 0;
+  const blocked = false;   // an empty goal now simply means the whole mushaf
   return `<div class="ob-wrap"><div class="card ob-card">
     ${head}
     <div class="ob-body">${body}</div>
@@ -937,6 +1065,7 @@ function renderToday() {
   </section>
 
   ${compactCatchup()}
+  ${installWelcome()}
   ${backupNudge()}
   <div class="stats">
     <div class="stat"><div class="k">${esc(T('stat_streak'))}</div><div class="v">${st.streak}<small>${esc(T('days'))}</small></div><div class="d">${esc(T('best'))} ${st.best}</div></div>
@@ -1028,15 +1157,10 @@ function catchupCard() {
 function scopeLine() {
   const p = S.profile || {};
   const sc = p.scope || { mode: 'all' };
-  if (sc.mode === 'all') return '';
-  const pages = sc.pages || [];
-  const label = sc.mode === 'juz'
-    ? coveredBy(pages, 'juz').map((j) => T('juz') + ' ' + j).join(' · ')
-    : sc.mode === 'surah'
-      ? coveredBy(pages, 'surah').map((n) => (SURAHMAP[n] ? (S.lang === 'ar' ? SURAHMAP[n].arPlain || SURAHMAP[n].ar : SURAHMAP[n].en) : '')).join(' · ')
-      : '';
-  const range = pages.length ? `${Math.min(...pages)}–${Math.max(...pages)}` : '';
-  return `<div class="scope-line"><b>${esc(T('summary_goal'))}:</b> ${esc(label || `${pages.length} ${T('pages_word')}`)} <span>· ${esc(T('pages_word'))} ${esc(range)}</span></div>`;
+  if (sc.mode === 'all' || !(sc.pages || []).length) return '';
+  const pages = sc.pages;
+  const range = `${Math.min(...pages)}–${Math.max(...pages)}`;
+  return `<div class="scope-line"><b>${esc(T('summary_goal'))}:</b> ${esc(scopeLabelOf(pages, true))} <span>· ${esc(T('pages_word'))} ${esc(range)}</span></div>`;
 }
 
 function compactCatchup() {
@@ -1231,7 +1355,9 @@ function cloudTouch() {
    ADD TO HOME SCREEN — the app is already a PWA; this makes it obvious.
    On iOS only Safari can install; on Android Chrome (and Edge) show a real prompt.
    ============================================================ */
-const INSTALL_DONE = 'mishkat.install.done';
+const INSTALL_DONE = 'mishkat.install.done';      // installed: never ask again
+const INSTALL_WELCOME = 'mishkat.install.welcome';  // shown right after setting up
+const INSTALL_HIDDEN = 'mishkat.install.hidden';    // "not now": keep the People card
 const standalone = () => (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
 const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const isSafari = () => isIOS() && /^((?!chrome|android|crios|fxios|edgios).)*safari/i.test(navigator.userAgent);
@@ -1241,6 +1367,14 @@ window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); inst
 
 function installCard() {
   if (standalone() || localStorage.getItem(INSTALL_DONE)) return '';
+  return renderInstallCard(false);
+}
+function installWelcome() {
+  if (standalone() || localStorage.getItem(INSTALL_DONE)) return '';
+  if (localStorage.getItem(INSTALL_WELCOME)) return '';   // dismissed after setup
+  return renderInstallCard(true);
+}
+function renderInstallCard(welcome) {
   const step = (n, txt) => `<li><b>${n}</b> ${esc(txt)}</li>`;
   let inner;
   if (isIOS()) {
@@ -1270,12 +1404,13 @@ function installCard() {
       <ol class="inst-steps">${step(1, T('inst_android_1'))}${step(2, T('inst_android_2'))}</ol>
       <p class="note">${esc(T('inst_android_note'))}</p>`;
   }
-  return `<div class="card install-card" style="margin-top:16px">
-    <div class="card-h"><h3>${esc(T('inst_title'))}</h3><div class="right"><span class="badge">${esc(T('inst_badge'))}</span></div></div>
-    <p class="note">${esc(T('inst_lede'))}</p>
+  return `<div class="card install-card${welcome ? ' install-welcome' : ''}" style="margin-top:${welcome ? '18' : '16'}px">
+    <div class="card-h"><h3>${esc(welcome ? T('inst_welcome_title') : T('inst_title'))}</h3><div class="right"><span class="badge">${esc(T('inst_badge'))}</span></div></div>
+    <p class="note">${esc(welcome ? T('inst_welcome_lede') : T('inst_lede'))}</p>
     ${inner}
-    <div class="row" style="margin-top:12px">
-      <button class="btn sm ghost" data-install-hide>${esc(T('inst_hide'))}</button>
+    <div class="row" style="margin-top:12px;align-items:center">
+      <button class="btn sm ghost" data-install-hide>${esc(T(welcome ? 'inst_welcome_hide' : 'inst_hide'))}</button>
+      ${welcome ? `<span class="note">${esc(T('inst_welcome_kept'))}</span>` : ''}
     </div>
   </div>`;
 }
@@ -1292,8 +1427,8 @@ function renderPeople() {
     const prof = (rec && rec.profile) || {};
     const snap = autoSnapshotOf(p.id);
     const when = p.updatedAt ? new Date(p.updatedAt).toLocaleDateString(S.lang === 'ar' ? 'ar' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
-    const sc = (prof.scope && prof.scope.mode) || 'all';
-    const goal = sc === 'juz' ? T('goal_q_juz') : sc === 'surah' ? T('goal_q_surah') : sc === 'pages' ? T('goal_q_pages') : T('goal_q_all');
+    const scp = (prof.scope && prof.scope.pages) || [];
+    const goal = scopeLabelOf(scp, true) || T('goal_q_all');
     const sessions = Object.keys((rec && rec.days) || {}).length;
     const detail = prof.budget
       ? `${goal} · ${prof.budget} ${T('min')} · ${sessions} ${T('sessions')}`
@@ -2027,7 +2162,7 @@ function go(v, opts = {}) {
 /* ============================================================
    EVENTS
    ============================================================ */
-const OB_SEL = '[data-ob-next],[data-ob-back],[data-ob-finish],[data-ob-lang],[data-ob-page],[data-ob-juz],[data-ob-surah],[data-ob-shaky],[data-ob-clear],[data-ob-all],[data-ob-budget],[data-ob-mode],[data-ob-pick],[data-ob-pickclear]';
+const OB_SEL = '[data-ob-next],[data-ob-back],[data-ob-finish],[data-ob-lang],[data-ob-page],[data-ob-juz],[data-ob-surah],[data-ob-shaky],[data-ob-clear],[data-ob-all],[data-ob-budget],[data-ob-mode],[data-ob-pick],[data-ob-pickclear],[data-ob-exclude],[data-ob-open]';
 const PERSON_SEL = '[data-person-open],[data-person-export],[data-person-del],[data-person-new],[data-person-restore],[data-cloud-save],[data-cloud-send],[data-cloud-verify],[data-cloud-push],[data-cloud-pull],[data-cloud-signout],[data-cloud-forget],[data-cloud-sqlcopy],[data-owner-go],[data-owner-close],[data-owner-lock],[data-owner-panel],[data-owner-start],[data-install-go],[data-install-hide]';
 const CATCH_SEL = '[data-forget],[data-catchup],[data-skipcatch],[data-viewcatch]';
 const SYNC_SEL = '[data-sync-out],[data-sync-in],[data-copy-sync],[data-apply-sync]';
@@ -2086,11 +2221,29 @@ document.addEventListener('click', (ev) => {
   }
   if (el.dataset.obMode) {
     const m = el.dataset.obMode;
-    if (draft.mode === m) return;
-    draft.mode = m;
-    draft.picks = new Set();
-    draft.startTouched = false;
+    if (m === 'all') {
+      draft.picks.clear(); draft.expanded.clear(); draft.startTouched = false;
+      toast(T('goal_all_set'), 3000); render(); return;
+    }
+    if (m === 'juz') { draft.expanded.add('j'); }
+    else if (m === 'surah') { draft.expanded.add('s'); }
+    render(); return;   // picks are kept: changing the kind never throws work away
+  }
+  if (el.dataset.obOpen) {
+    const key = el.dataset.obOpen;
+    if (key === 'j' || key === 's') {          // "show the pages" for every group
+      const prefix = key;
+      const groups = prefix === 'j' ? Object.keys(JUZMAP || {}).map((j) => 'j' + j) : Object.values(SURAHMAP || {}).map((m) => 's' + m.n);
+      const openAll = !groups.every((g) => draft.expanded.has(g));
+      groups.forEach((g) => openAll ? draft.expanded.add(g) : draft.expanded.delete(g));
+    } else if (draft.expanded.has(key)) draft.expanded.delete(key);
+    else draft.expanded.add(key);
     render(); return;
+  }
+  if (el.dataset.obExclude) {
+    const pages = String(el.dataset.obExclude).split(',').filter(Boolean).map(Number);
+    pages.forEach((p) => draft.picks.delete(p));     // drop just this part, keep the rest
+    draft.startTouched = false; render(); return;
   }
   if (el.dataset.obPick) {
     const kind = el.dataset.obKind || 'juz';
@@ -2211,14 +2364,16 @@ document.addEventListener('click', (ev) => {
     const ev = installEvent; installEvent = null;
     ev.prompt();
     ev.userChoice.then((choice) => {
+      localStorage.setItem(INSTALL_WELCOME, '1');
       if (choice && choice.outcome === 'accepted') { localStorage.setItem(INSTALL_DONE, '1'); toast(T('inst_done'), 3600); }
       render();
     }).catch(() => render());
     return;
   }
   if (el.dataset.installHide !== undefined) {
-    localStorage.setItem(INSTALL_DONE, '1'); render();
-    toast(T('inst_hidden'), 3200); return;
+    localStorage.setItem(INSTALL_WELCOME, '1');   // do not push it on Today again…
+    render();                                     // …but keep it on the People page
+    toast(T('inst_hidden'), 3600); return;
   }
 
   /* ---- cloud backup */

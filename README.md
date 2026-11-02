@@ -96,12 +96,39 @@ git push -u origin main
 
 > **When you replace `index.html` later,** bump the cache name in `sw.js` (`mishkat-v1` → `mishkat-v2`). Browsers keep serving the old cached copy until the service worker changes.
 
+### Choosing a goal (juz · surahs · pages, in any mix)
+
+Onboarding step 2 is one screen with everything: **all 30 juz**, **all 114 surahs**
+in mushaf order (numbered), and a grid of all 604 loose pages. Picks accumulate
+across all three — Juz 29 plus Al-Kahf plus page 100 is one legitimate goal — and
+the "Your goal so far" box shows the result as removable chips.
+
+Narrowing down:
+
+- **▸** beside a juz or a surah opens its pages, so a single page can be dropped from
+  a juz, or a short surah left out of a juz;
+- **▸ All pages** opens every group at once (and closes them again);
+- **✕** on a chip removes that whole part without touching the rest.
+
+What is stored is a plain page list: `profile.scope = { mode, pages }` where `mode`
+is only a label (`juz` / `surah` / `pages` / `all`). The planner has always worked
+from the page set, so a mixed goal needs no engine change. Empty selection means
+the whole mushaf.
+
+One honest limit: a few short surahs share a page (Al-Ikhlaas, Al-Falaq, An-Naas all
+end on 604). Pages, not verses, are the unit — so picking An-Naas picks page 604,
+which is why picking two or three of them reads as "1 page". The picker labels those
+surahs with their page number rather than pretending otherwise.
+
 ### Phone install vs app stores
 
 **Home screen is the intended path.** `manifest.webmanifest` + `sw.js` already make
 this a proper PWA: standalone window, own icon, offline. On Android Chrome the app
-shows a real `beforeinstallprompt` button; on iOS the People page shows the Safari
-Share-sheet steps. Share **[HOME-SCREEN.md](HOME-SCREEN.md)** with whoever installs it.
+shows a real `beforeinstallprompt` button; on iOS the Safari Share-sheet steps are
+spelled out. It appears **twice on purpose**: once as *"Last step"* on Today right
+after onboarding finishes, and permanently in **People → Put it on your home screen**.
+"Not now" only dismisses the first one (key `mishkat.install.welcome`); the People card
+stays until installed (`mishkat.install.done`). Share **[HOME-SCREEN.md](HOME-SCREEN.md)** with whoever installs it.
 
 **Stores, if you ever want them:** a website cannot be uploaded to either store.
 It has to be wrapped in a native shell.

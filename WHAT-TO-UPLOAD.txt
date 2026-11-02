@@ -1,25 +1,18 @@
-DROP-IN UPDATE — 7 files, no full re-upload
-============================================
+DROP-IN UPDATE
+==============
 
-Essential (the app itself):
-
-  1. index.html       <- built app; "Put it on your home screen" card on People
-  2. sw.js            <- cache bumped to mishkat-v9 so phones fetch the new app
-
-Docs:
-
-  3. README.md        <- stores vs home screen, owner access
-  4. HOME-SCREEN.md   <- NEW file: iPhone/Android install steps, English + Arabic.
-                         Send this link to whoever installs Mishkat.
+Essential:
+  1. index.html   <- goal step: all 30 juz + all 114 surahs + all 604 pages in one
+                     screen, mixes allowed, parts removable (v11)
+  2. sw.js        <- cache bumped to mishkat-v11
 
 Source (only if app/ is in your repo):
+  3. app/app.js
+  4. app/i18n.js
+  5. app/style.css
 
-  5. app/app.js
-  6. app/i18n.js
-  7. app/style.css
+Also changed:
+  6. README.md
 
-Everything else (assets/, data/, fonts/, img/, manifest.webmanifest,
-CLOUD-SETUP.md, build scripts) is unchanged.
-
-iOS note: only Safari can install a web app. Chrome/Firefox on iPhone cannot —
-the app now detects that and says so on the People page.
+Unchanged: assets/, data/, fonts/, img/, manifest.webmanifest, CLOUD-SETUP.md,
+HOME-SCREEN.md, build scripts.

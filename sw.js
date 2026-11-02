@@ -1,5 +1,5 @@
 /* Mishkat — offline shell. One file, one cache. */
-const CACHE = 'mishkat-v9';
+const CACHE = 'mishkat-v11';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './assets/logo-192.png', './assets/logo-512.png', './assets/favicon-32.png'];
 
 self.addEventListener('install', (e) => {
