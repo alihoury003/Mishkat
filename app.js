@@ -257,17 +257,37 @@ function toast(msg, ms = 2800) {
 /* ---------------- owner access ---------------- */
 const isOwner = () => !!localStorage.getItem(OWNER_KEY) && localStorage.getItem(OWNER_KEY) === S.personId;
 
+const OWNER_LAST = 'mishkat.owner.last';   // remembers the record after "leave owner mode"
+function peekPerson(id) {
+  try { return JSON.parse(localStorage.getItem('mishkat.v2/p:' + id) || 'null'); } catch (e) { return null; }
+}
+function findOwnerRecord() {
+  // 1. the remembered id, 2. any record that looks like the owner's plan
+  const last = localStorage.getItem(OWNER_LAST);
+  if (last && peekPerson(last)) return last;
+  const list = vaultIndex().people || [];
+  for (const p of list) {
+    const rec = peekPerson(p.id);
+    const pr = rec && rec.profile;
+    if (pr && pr.name === OWNER_PROFILE.name && pr.startPage === OWNER_PROFILE.startPage) return p.id;
+  }
+  return null;
+}
+
 function unlockOwner() {
   // the owner is their own record in this browser — unlocking never overwrites
-  // whoever else was using the device
-  const known = localStorage.getItem(OWNER_KEY);
+  // whoever else was using the device, and never makes a second copy of it
+  const known = localStorage.getItem(OWNER_KEY) || findOwnerRecord();
   if (known && loadPerson(known)) {
+    localStorage.setItem(OWNER_KEY, known);
+    localStorage.setItem(OWNER_LAST, known);
     switchPerson(known);
     toast(S.lang === 'ar' ? 'خطة المالك محمّلة.' : 'Owner plan loaded.', 3200);
     return;
   }
   const id = createPerson(OWNER_PROFILE.name);
   localStorage.setItem(OWNER_KEY, id);
+  localStorage.setItem(OWNER_LAST, id);
   S.profile = Object.assign({}, OWNER_PROFILE, { start: todayISO() });
   S.onboardStep = 0;
   buildPlan(); save();
@@ -276,12 +296,15 @@ function unlockOwner() {
   toast(S.lang === 'ar' ? 'خطة المالك محمّلة.' : 'Owner plan loaded.', 3200);
 }
 function lockOwner() {
-  // leave owner mode: drop the owner record, and open a student record
+  // leave owner mode: the owner record STAYS on the device (hidden behind the
+  // code), because deleting it is how a plan gets lost by accident
   const ownerId = localStorage.getItem(OWNER_KEY);
   localStorage.removeItem(OWNER_KEY);
-  if (ownerId) deletePerson(ownerId);
-  const next = activePersonId();
-  if (next && loadPerson(next)) { switchPerson(next); return; }
+  // hand the device to somebody else — never leave the owner record open
+  const others = (vaultIndex().people || []).filter((p) => p.id !== ownerId);
+  const active = activePersonId();
+  const pick = others.find((p) => p.id === active) || others.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0];
+  if (pick && loadPerson(pick.id)) { switchPerson(pick.id); return; }
   S = defaultState(); PLAN = null;
   createPerson(''); save();
   startOnboarding();
@@ -315,6 +338,7 @@ function ownerCard() {
     <div class="card-h"><h3>${esc(T('owner_badge'))}</h3><div class="right"><span class="badge ok">✦</span></div></div>
     <p class="note">${esc(T('owner_note'))}</p>
     <div class="row" style="margin-top:10px"><button class="btn sm ghost" data-owner-lock>${esc(T('owner_switch'))}</button></div>
+    <p class="note" style="margin-top:8px">${esc(T('owner_back'))}</p>
   </div>`;
 }
 
@@ -1245,6 +1269,7 @@ function renderPeople() {
       <div class="card-h"><h3>${esc(T('pp_import'))}</h3></div>
       <p class="note">${esc(T('pp_import_note'))}</p>
       <div class="row" style="margin-top:12px">
+        <button class="btn sm ghost" data-owner-start>${esc(T('owner_enter'))}</button>
         <button class="btn sm ghost" data-import>${esc(T('pp_import'))}</button>
         <input type="file" id="importFile" accept="application/json,.json" hidden>
         <button class="btn sm ghost" data-go="onboard">${esc(T('pp_start_fresh'))}</button>
@@ -1284,6 +1309,7 @@ function renderPeople() {
     </div>
     <div id="syncBox"></div>
     <p class="note" style="margin-top:14px">${esc(T('pp_honest'))}</p>
+    ${isOwner() ? '' : `<div class="row" style="margin-top:10px"><button class="btn sm ghost" data-owner-start>${esc(T('owner_enter'))}</button></div>`}
   </div>
 
   ${cloudCard()}
@@ -1946,7 +1972,7 @@ function go(v, opts = {}) {
    EVENTS
    ============================================================ */
 const OB_SEL = '[data-ob-next],[data-ob-back],[data-ob-finish],[data-ob-lang],[data-ob-page],[data-ob-juz],[data-ob-surah],[data-ob-shaky],[data-ob-clear],[data-ob-all],[data-ob-budget],[data-ob-mode],[data-ob-pick],[data-ob-pickclear]';
-const PERSON_SEL = '[data-person-open],[data-person-export],[data-person-del],[data-person-new],[data-person-restore],[data-cloud-save],[data-cloud-send],[data-cloud-verify],[data-cloud-push],[data-cloud-pull],[data-cloud-signout],[data-cloud-forget],[data-cloud-sqlcopy],[data-owner-go],[data-owner-close],[data-owner-lock],[data-owner-panel]';
+const PERSON_SEL = '[data-person-open],[data-person-export],[data-person-del],[data-person-new],[data-person-restore],[data-cloud-save],[data-cloud-send],[data-cloud-verify],[data-cloud-push],[data-cloud-pull],[data-cloud-signout],[data-cloud-forget],[data-cloud-sqlcopy],[data-owner-go],[data-owner-close],[data-owner-lock],[data-owner-panel],[data-owner-start]';
 const CATCH_SEL = '[data-forget],[data-catchup],[data-skipcatch],[data-viewcatch]';
 const SYNC_SEL = '[data-sync-out],[data-sync-in],[data-copy-sync],[data-apply-sync]';
 
@@ -2067,6 +2093,7 @@ document.addEventListener('click', (ev) => {
 
   /* ---- owner */
   if (el.dataset.ownerClose !== undefined) { $('.modal')?.classList.remove('on'); return; }
+  if (el.dataset.ownerStart !== undefined) { ownerModal(false); return; }
   if (el.dataset.ownerGo !== undefined) {
     const val = ($('#ownerCode')?.value || '').trim();
     if (val === OWNER_CODE) { $('.modal')?.classList.remove('on'); unlockOwner(); }

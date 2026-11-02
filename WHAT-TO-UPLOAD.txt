@@ -1,0 +1,25 @@
+DROP-IN UPDATE — 5 files, no full re-upload
+============================================
+
+Upload these into the repo root, replacing the existing ones:
+
+  1. index.html     <- the app itself (built file: the whole change lives here)
+  2. sw.js          <- cache bumped to mishkat-v8 so phones fetch the new app
+  3. README.md      <- documents the new Owner-access steps
+
+Optional, only if you also keep the source in the repo:
+
+  4. app/app.js     <- owner record is no longer deleted on "Switch to a student"
+  5. app/i18n.js    <- new owner strings (EN + AR)
+
+Everything else (assets/, data/, fonts/, img/, manifest, CLOUD-SETUP.md,
+build scripts) is unchanged — do not re-upload it.
+
+On github.com: open the file in the repo -> pencil icon -> delete all -> paste
+the new contents -> Commit changes.  For app/app.js and app/i18n.js do the same
+in the app/ folder.
+
+Order matters slightly: commit index.html and sw.js together so nobody loads
+the new HTML with an old service worker.
+
+CLOUDSETUP note: CLOUD-SETUP.md is unchanged since your last upload.

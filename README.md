@@ -96,6 +96,21 @@ git push -u origin main
 
 > **When you replace `index.html` later,** bump the cache name in `sw.js` (`mishkat-v1` → `mishkat-v2`). Browsers keep serving the old cached copy until the service worker changes.
 
+### Owner access (for you, not for students)
+
+Your own plan lives in its own record on the device, behind a code
+(`OWNER_CODE` at the top of `app/app.js`, default `mishkat-314` — change it before
+you hand the app to anyone). Three ways in:
+
+1. **People → Owner access** (bottom of the safety card),
+2. **tap the logo mark seven times** within three seconds,
+3. open the site with **`#mishkat`** on the end of the URL.
+
+Unlocking never overwrites a student's record and never creates a second copy of
+yours. **"Switch to a student"** leaves owner mode but *keeps* your record on the
+device; coming back later finds it again. Since the code is visible in the source
+of a public page, treat it as a lock against children, not against an attacker.
+
 ### Cloud backup (optional)
 
 People → **Cloud backup** takes a Project URL and an anon key from your own free
